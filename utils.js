@@ -32,7 +32,7 @@ const saveData = (newData) => {
 const getAccessLevel = (uuid) => {
     if (!uuid) return 0;
     try {
-        const user = db.prepare('SELECT access_level FROM users WHERE uuid = ?').get(uuid);
+        const user = db.prepare('SELECT access_level FROM users WHERE uuid = ? or email = ?').get(uuid,uuid);
         if (user) return user.access_level;
         return 0; 
     } catch (e) { return 0; }

@@ -10,7 +10,7 @@ const crypto = require('crypto');
 const { GoogleGenAI } = require("@google/genai");
 
 // --- INTERNAL MODULES ---
-const db = require('./database'); 
+const db = require('./database');
 const { loadData, recursiveFilter, saveData, getAccessLevel } = require('./utils');
 const Security = require('./security');
 const taskQueue = require('./queue');
@@ -19,24 +19,40 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 
 // --- CONFIGURATION ---
-const MODEL_NAME = "gemini-2.5-flash-lite"; 
+const MODEL_NAME = "gemini-2.5-flash-lite";
 const JWT_SECRET = process.env.JWT_SECRET || "your-very-secure-secret-key";
-const ADMIN_SECRET = process.env.ADMIN_SECRET || "admin-master-key-change-this"; 
-const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`; 
+const ADMIN_SECRET = process.env.ADMIN_SECRET || "admin-master-key-change-this";
+const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const FRONTEND_URL = process.env.FRONTEND_URL || `http://localhost:5173`;
 
 const RESUME_PATH = path.join(__dirname, 'resume.pdf');
 const ABOUT_ME_PATH = path.join(__dirname, 'about_me.txt');
 const ADMIN_EMAILS = [process.env.EMAIL_TO, 'prasannathapax7@gmail.com'];
 
+// --- STRICT JSON SCHEMA ---
+const EMAIL_RESPONSE_SCHEMA = {
+    type: "object",
+    properties: {
+        subject: { type: "string", description: "Email subject line" },
+        body: { type: "string", description: "Email body in HTML format (use <p>, <br>, <b>)." },
+        attachResume: { type: "boolean", description: "True if resume should be attached." }
+    },
+    required: ["subject", "body", "attachResume"]
+};
+
 // --- MIDDLEWARE ---
 app.use(cors());
-app.use(express.json({ limit: '10mb' })); 
-app.use(express.urlencoded({ extended: true })); 
-app.use(express.static(path.join(__dirname, 'frontend/dist'))); 
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'frontend/dist')));
 
 const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100 });
 app.use('/api', limiter);
+
+const getContext = () => {
+    try { return fs.readFileSync(ABOUT_ME_PATH, 'utf8'); }
+    catch { return "Senior Software Engineer."; }
+};
 
 // --- HELPER: USER MANAGEMENT ---
 const registerUser = (email, name, existingUuid) => {
@@ -70,7 +86,7 @@ const registerUser = (email, name, existingUuid) => {
 // --- HELPER: AI RETRY LOGIC ---
 const runWithRetry = async (fn, retries = 3) => {
     for (let i = 0; i < retries; i++) {
-        try { return await fn(); } 
+        try { return await fn(); }
         catch (error) {
             const isRateLimit = error.message?.includes('429') || (error.status === 429);
             if (isRateLimit && i < retries - 1) {
@@ -81,80 +97,53 @@ const runWithRetry = async (fn, retries = 3) => {
     }
 };
 
-// --- ADMIN DASHBOARD UI ---
-const generateAdminDashboard = (users, adminToken) => {
-    const rows = users.map(u => {
-        const levelColor = u.access_level < 0 ? 'bg-red-50 text-red-700' : (u.access_level > 0 ? 'bg-green-50 text-green-700' : 'text-gray-600');
-        
-        let options = '';
-        const levels = [-1, 0, 1, 2, 3, 4, 5];
-        const labels = { '-1': 'Blocked ⛔', '0': 'Public 🌍', '1': 'Basic 👤', '5': 'VIP ⭐' };
-        
-        levels.forEach(l => {
-            const isSelected = u.access_level === l ? 'selected' : '';
-            const label = labels[l] || `Level ${l}`;
-            options += `<option value="${l}" ${isSelected}>${label}</option>`;
-        });
+// --- EMAIL TEMPLATES ---
 
-        return `
-        <tr class="border-b hover:bg-gray-50 transition-colors">
-            <td class="p-4 font-medium text-gray-900">${u.name || 'Anonymous'}</td>
-            <td class="p-4 font-mono text-sm text-gray-500">${u.email || '-'}</td>
-            <td class="p-4"><code class="bg-gray-100 px-2 py-1 rounded text-xs select-all text-gray-500">${u.uuid}</code></td>
-            <td class="p-4 font-bold ${levelColor}">${u.access_level}</td>
-            <td class="p-4 text-xs text-gray-400">${new Date(u.last_seen).toLocaleDateString()}</td>
-            <td class="p-4">
-                <form action="/api/admin/update-level" method="POST" class="flex items-center gap-2">
-                    <input type="hidden" name="token" value="${adminToken}">
-                    <input type="hidden" name="uuid" value="${u.uuid}">
-                    <select name="level" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-2 py-1 border bg-white">
-                        ${options}
-                    </select>
-                    <button type="submit" class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-1 px-3 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
-                        Update
-                    </button>
-                </form>
-            </td>
-        </tr>`;
-    }).join('');
-
+const generateUserEmail = (aiBodyContent, unsubscribeLink) => {
     return `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <title>Portfolio Control Center</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-    </head>
-    <body class="bg-gray-50 min-h-screen font-sans">
-        <div class="max-w-7xl mx-auto py-10 px-4">
-            <div class="bg-white shadow-xl rounded-2xl overflow-hidden border border-gray-100">
-                <div class="bg-gray-900 px-6 py-5 border-b border-gray-800 flex justify-between items-center">
-                    <h1 class="text-xl font-bold text-white">🛡️ Access Control</h1>
-                    <span class="bg-gray-800 px-3 py-1 text-xs text-gray-300 rounded-full">${users.length} Users</span>
-                </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left border-collapse">
-                        <thead>
-                            <tr class="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
-                                <th class="p-4">User</th>
-                                <th class="p-4">Contact</th>
-                                <th class="p-4">UUID</th>
-                                <th class="p-4">Level</th>
-                                <th class="p-4">Active</th>
-                                <th class="p-4 w-48">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-100 bg-white">${rows}</tbody>
-                    </table>
-                </div>
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #333; line-height: 1.6; font-size: 15px;">
+        <div style="max-width: 580px; margin: 0 auto; padding: 20px;">
+            <div>${aiBodyContent}</div>
+            <div style="margin-top: 50px; padding-top: 15px; border-top: 1px solid #f0f0f0; font-size: 12px; color: #aaa;">
+                <p style="margin: 0;">
+                    Sent via <a href="https://prasannathapa.in" style="color: #aaa; text-decoration: none;">prasannathapa.in</a>.
+                    <span style="margin: 0 8px;">|</span>
+                    <a href="${unsubscribeLink}" style="color: #aaa; text-decoration: underline;">Stop emails</a>
+                </p>
             </div>
         </div>
-    </body>
-    </html>`;
+    </div>`;
 };
 
-// --- EMAILER ---
+const generateAdminSummaryEmail = (userDetails, originalMessage, aiResponseHtml, attachedResume, adminLink) => {
+    return `
+    <div style="font-family: sans-serif; border: 1px solid #e5e7eb; padding: 20px; border-radius: 8px; max-width: 600px; margin: 0 auto; background: #fff;">
+        <h3 style="color: #111; margin-top: 0; font-size: 18px;">Request: ${userDetails.type}</h3>
+        <div style="background-color: #f9fafb; padding: 12px; border-radius: 6px; font-size: 14px; margin-bottom: 20px; border: 1px solid #f3f4f6;">
+            <strong>${userDetails.name}</strong> <span style="color:#6b7280">&lt;${userDetails.email || 'No Email'}&gt;</span><br>
+            <span style="color: #6b7280; font-size: 12px;">Company: ${userDetails.company || '-'}</span>
+        </div>
+        <div style="margin-bottom: 20px;">
+            <div style="font-size: 11px; font-weight: bold; color: #9ca3af; margin-bottom: 6px; letter-spacing: 0.5px;">MESSAGE</div>
+            <div style="padding: 12px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 6px; font-style: italic; color: #92400e;">"${originalMessage}"</div>
+        </div>
+        <div style="margin-bottom: 25px;">
+            <div style="font-size: 11px; font-weight: bold; color: #9ca3af; margin-bottom: 6px; letter-spacing: 0.5px;">AI REPLY (Resume: ${attachedResume ? '✅' : '❌'})</div>
+            <div style="padding: 12px; background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; font-size: 14px; color: #166534;">${aiResponseHtml}</div>
+        </div>
+        <div style="text-align: center;">
+            <a href="${adminLink}" style="background-color: #111; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 14px;">Manage Access</a>
+        </div>
+    </div>`;
+};
+
+const generateResubscribeEmail = (resubscribeLink) => `
+    <div style="font-family: sans-serif; padding: 40px 20px; text-align: center; color: #333; max-width: 500px; margin: 0 auto;">
+        <h2 style="font-weight: 600; margin-bottom: 10px;">Emails Stopped</h2>
+        <p style="color: #555; font-size: 16px; margin-bottom: 30px;">I've updated my settings. You won't receive further emails from my website.</p>
+        <p><a href="${resubscribeLink}" style="color: #2563eb; text-decoration: none; font-size: 14px;">Mistake? Allow emails</a></p>
+    </div>`;
+
 const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST, port: parseInt(process.env.SMTP_PORT), secure: true,
     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
@@ -167,92 +156,127 @@ const sendEmail = async (to, subject, html, attachments = []) => {
 
 // --- ROUTES ---
 
-// 1. GET PORTFOLIO (The View Layer)
 app.get('/api/portfolio', (req, res) => {
     const uuid = req.headers['x-access-token'] || req.query.uuid;
-    
-    // Check Status in DB
-    let accessLevel = 0;
-    let isRegistered = false;
-
-    if (uuid) {
-        const user = db.prepare('SELECT access_level FROM users WHERE uuid = ?').get(uuid);
-        if (user) {
-            accessLevel = user.access_level;
-            isRegistered = true; 
-            db.prepare('INSERT INTO access_logs (uuid, ip, payload) VALUES (?, ?, ?)').run(uuid, req.ip, 'Portfolio View');
-        }
-    }
-
-    // Filter Data & Return Metadata
-    const content = recursiveFilter(loadData(), accessLevel);
+    const accessLevel = getAccessLevel(uuid);
+    if (uuid) db.prepare('INSERT INTO access_logs (uuid, ip, payload) VALUES (?, ?, ?)').run(uuid, req.ip, 'Portfolio View');
     res.json({
-        content: content,
-        meta: { registered: isRegistered, level: accessLevel }
+        content: recursiveFilter(loadData(), accessLevel),
+        meta: { registered: !!uuid && accessLevel !== 0, level: accessLevel }
     });
 });
 
-// 2. UNIFIED REQUEST HANDLER (The Logic Layer)
 app.post('/api/request', async (req, res) => {
-    const { email, name, message, company, type } = req.body; 
+    const { email, name, message, company, type } = req.body;
     const userUuidHeader = req.headers['x-access-token'];
 
-    // Security Checks
     if (email && Security.isBlacklisted(email)) return res.status(403).json({ error: "Access Denied" });
     if (Security.isMalicious(message) || Security.isMalicious(name)) {
         db.prepare('INSERT INTO access_logs (email, name, ip, payload) VALUES (?, ?, ?, ?)').run(email, `[ATTACK] ${name}`, req.ip, message);
         return res.json({ status: "Received" });
     }
 
-    // Register User
     const uuid = registerUser(email, name, userUuidHeader);
     const currentLevel = getAccessLevel(uuid);
     if (currentLevel === -1) return res.status(403).json({ error: "Blocked by Admin" });
 
-    // Process Async
     taskQueue.add(async () => {
-        console.log(`[Request] ${type} | ${name} | ${uuid}`);
+        console.log(`[Request] Processing ${type} for ${name} (${uuid})`);
         let aiRes = { subject: "Re: Request", body: "<p>Received.</p>", attachResume: false };
-        
+
         try {
             if (process.env.GEMINI_API_KEY) {
                 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
                 const projects = loadData().find(d => d.type === 'blogs')?.blogs || [];
                 const projectsContext = projects.map(p => ({ title: p.title, description: p.content, link: p.blog || "" }));
-                const prompt = `ACT AS: Prasanna Thapa. CONTEXT: ${type}. MSG: "${message}" (Co: ${company}). PROJECTS: ${JSON.stringify(projectsContext)}. TASK: HTML response. JSON Schema: {subject, body, attachResume}`;
+
+                // --- DYNAMIC & DEFENSIVE AI PROMPT ---
+                let instructions = "";
+                if (type === 'resume') {
+                    instructions = `
+                    ACT AS: Prasanna Thapa (Me).
+                    TONE: Professional, Honest, Protective of Data. First-person.
+                    
+                    DECISION LOGIC:
+                    1. ANALYZE the 'Message' and 'Company' fields.
+                    2. IF the request seems GENUINE (valid company, clear intent, professional wording):
+                       - Write a polite response matching my skills (from PROFILE) to their context.
+                       - Set "attachResume": true.
+                    3. IF the request looks like SPAM, FRAUD, or suspecious:
+                       - Write a polite but firm response stating: "To protect my privacy, I only share my full resume with verified recruiters or active job opportunities. Please provide your official company email or job details to proceed. or rephrase it depending on the context, like I am already working in X if the recuiter is from X comapny.. make it personalised"
+                       - Set "attachResume": false.
+                    `;
+                } else if (type === 'contact') {
+                    instructions = `
+                    ACT AS: Prasanna Thapa (Me).
+                    TONE: Casual, friendly, slightly humorous. First-person.
+                    TASK: Acknowledge the message warmly.
+                    ACTION: Set "attachResume": false, (inless needed explicitily)
+                    `;
+                } else {
+                    instructions = `
+                    ACT AS: Prasanna Thapa (Me).
+                    TONE: Neutral, efficient.
+                    TASK: Confirm receipt of request.
+                    ACTION: Set "attachResume": false.
+                    `;
+                }
+
+                const prompt = `
+                ${instructions}
+                
+                MY PROFILE: ${getContext()}
+                MY PROJECTS: ${JSON.stringify(projectsContext)}
+                
+                INCOMING MESSAGE:
+                From: ${name}
+                Company: ${company || "Not specified"}
+                Type: ${type}
+                Message: "${message}"
+
+                CRITICAL: Output valid JSON matching schema. Body must be HTML. Sign off as 'Prasanna Thapa' and my desgination.
+                `;
+
                 aiRes = await runWithRetry(async () => {
-                    const model = ai.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
-                    const result = await model.generateContent(prompt);
-                    return JSON.parse(result.response.text);
+                    const response = await ai.models.generateContent({
+                        model: MODEL_NAME,
+                        contents: prompt,
+                        config: {
+                            responseMimeType: "application/json",
+                            responseJsonSchema: EMAIL_RESPONSE_SCHEMA
+                        }
+                    });
+
+                    if (response.text) {
+                        return JSON.parse(response.text);
+                    }
+                    throw new Error("Empty response from AI");
                 });
             }
-        } catch(e) { console.error("AI Error:", e.message); }
+        } catch (e) { console.error("AI Error:", e.message); }
 
-        const magicLink = `${FRONTEND_URL}/?uuid=${uuid}`;
+        // Links
         const adminToken = jwt.sign({ role: 'admin' }, ADMIN_SECRET, { expiresIn: '365d' });
         const adminDashboardLink = `${BASE_URL}/admin/dashboard?token=${adminToken}`;
         const unsubscribeLink = `${BASE_URL}/api/unsubscribe?token=${jwt.sign({ email }, JWT_SECRET)}`;
 
         if (email) {
-            let userHtml = `<div style="font-family:sans-serif;color:#333;">${aiRes.body}`;
-            if (type !== 'contact') {
-                userHtml += `<div style="margin:30px 0;text-align:center;"><a href="${magicLink}" style="background:#000;color:#fff;padding:10px 20px;text-decoration:none;border-radius:5px;">Access Portfolio</a><p style="font-size:11px;margin-top:5px;color:#666">Or use key: ${uuid}</p></div>`;
-            }
-            userHtml += `<p style="font-size:11px;color:#999;margin-top:20px;">Don't want these? <a href="${unsubscribeLink}">Unsubscribe</a></p></div>`;
-            
+            const userHtml = generateUserEmail(aiRes.body, unsubscribeLink);
             const attachments = [];
-            if (aiRes.attachResume && fs.existsSync(RESUME_PATH)) attachments.push({ filename: 'Prasanna_Thapa_Resume.pdf', path: RESUME_PATH });
+            // Strict check: Only attach if AI authorized it AND file exists
+            if (aiRes.attachResume && fs.existsSync(RESUME_PATH)) {
+                attachments.push({ filename: 'Prasanna_Thapa_Resume.pdf', path: RESUME_PATH });
+            }
             await sendEmail(email, aiRes.subject, userHtml, attachments);
         }
 
-        const adminHtml = `
-            <div style="font-family:sans-serif;border:1px solid #ddd;padding:20px;border-radius:8px;">
-                <h2>New Request: ${type}</h2>
-                <p><strong>${name}</strong> (${email || 'Anon'})</p>
-                <p>UUID: <code>${uuid}</code></p>
-                <div style="background:#f9f9f9;padding:10px;margin:10px 0;font-style:italic;">"${message}"</div>
-                <a href="${adminDashboardLink}" style="background:#dc3545;color:#fff;padding:10px;text-decoration:none;border-radius:4px;display:inline-block;">Manage Access</a>
-            </div>`;
+        const adminHtml = generateAdminSummaryEmail(
+            { name, email, uuid, type, company },
+            message,
+            aiRes.body,
+            aiRes.attachResume,
+            adminDashboardLink
+        );
         await sendEmail(process.env.EMAIL_TO, `[${type}] ${name}`, adminHtml);
     });
 
@@ -260,42 +284,81 @@ app.post('/api/request', async (req, res) => {
     res.json({ content: publicData, uuid: uuid, meta: { registered: true, level: currentLevel } });
 });
 
-// ADMIN ROUTES
+// --- ADMIN ROUTES ---
 app.get('/admin/dashboard', (req, res) => {
     const { token } = req.query;
     try {
         jwt.verify(token, ADMIN_SECRET);
         const users = db.prepare('SELECT * FROM users ORDER BY last_seen DESC LIMIT 100').all();
-        res.send(generateAdminDashboard(users, token));
+
+        const rows = users.map(u => {
+            const levelColor = u.access_level < 0 ? 'bg-red-50 text-red-700' : (u.access_level > 0 ? 'bg-green-50 text-green-700' : 'text-gray-600');
+            let options = [-1, 0, 1, 2, 3, 4, 5].map(l =>
+                `<option value="${l}" ${u.access_level === l ? 'selected' : ''}>${l === -1 ? 'Block' : l === 0 ? 'Public' : l === 5 ? 'VIP' : 'Lvl ' + l}</option>`
+            ).join('');
+
+            return `<tr class="border-b hover:bg-gray-50">
+                <td class="p-3 font-bold">${u.name || 'Anon'}</td>
+                <td class="p-3 text-sm">${u.email || '-'}</td>
+                <td class="p-3 text-xs font-mono text-gray-400 select-all">${u.uuid}</td>
+                <td class="p-3 font-bold ${levelColor}">${u.access_level}</td>
+                <td class="p-3">
+                    <form action="/api/admin/update-level" method="POST" class="flex gap-2">
+                        <input type="hidden" name="token" value="${token}">
+                        <input type="hidden" name="uuid" value="${u.uuid}">
+                        <select name="level" class="border rounded px-2 py-1 text-sm">${options}</select>
+                        <button class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700">Save</button>
+                    </form>
+                </td>
+            </tr>`;
+        }).join('');
+
+        const html = `<!DOCTYPE html><html lang="en"><head><title>Admin</title><script src="https://cdn.tailwindcss.com"></script></head>
+        <body class="bg-gray-100 p-10"><div class="max-w-6xl mx-auto bg-white shadow rounded-lg p-6">
+        <h1 class="text-2xl font-bold mb-4">🛡️ User Control</h1>
+        <table class="w-full text-left"><thead><tr class="bg-gray-200">
+        <th class="p-3">User</th><th class="p-3">Email</th><th class="p-3">UUID</th><th class="p-3">Lvl</th><th class="p-3">Action</th>
+        </tr></thead><tbody>${rows}</tbody></table></div></body></html>`;
+
+        res.send(html);
     } catch (e) { res.status(401).send("Unauthorized"); }
 });
 
 app.post('/api/admin/update-level', (req, res) => {
-    const { token, uuid, level } = req.body;
     try {
-        jwt.verify(token, ADMIN_SECRET);
-        const lvl = parseInt(level);
-        db.prepare('UPDATE users SET access_level = ? WHERE uuid = ?').run(lvl, uuid);
-        
-        if (lvl === -1) {
-            const u = db.prepare('SELECT email FROM users WHERE uuid = ?').get(uuid);
-            if (u && u.email) Security.addToBlacklist(u.email, "Admin Block");
-        } else {
-            const u = db.prepare('SELECT email FROM users WHERE uuid = ?').get(uuid);
-            if (u && u.email) Security.removeFromBlacklist(u.email);
+        jwt.verify(req.body.token, ADMIN_SECRET);
+        const lvl = parseInt(req.body.level);
+        db.prepare('UPDATE users SET access_level = ? WHERE uuid = ?').run(lvl, req.body.uuid);
+
+        const u = db.prepare('SELECT email FROM users WHERE uuid = ?').get(req.body.uuid);
+        if (u && u.email) {
+            if (lvl === -1) Security.addToBlacklist(u.email, "Admin Block");
+            else Security.removeFromBlacklist(u.email);
         }
-        res.redirect(`/admin/dashboard?token=${token}`);
+        res.redirect(`/admin/dashboard?token=${req.body.token}`);
     } catch (e) { res.status(401).send("Unauthorized"); }
 });
 
-// UTILITY ROUTES
+// --- UTILITY ROUTES ---
 app.get('/api/unsubscribe', (req, res) => {
     try {
         const { email } = jwt.verify(req.query.token, JWT_SECRET);
         Security.addToBlacklist(email, "Unsubscribed");
         db.prepare('UPDATE users SET access_level = -1 WHERE email = ?').run(email);
-        res.send("<h1>Unsubscribed</h1>");
-    } catch (e) { res.status(400).send("Invalid"); }
+        const resubLink = `${BASE_URL}/api/security/whitelist?token=${jwt.sign({ email, scope: 'whitelist' }, JWT_SECRET)}`;
+        res.send(generateResubscribeEmail(resubLink));
+    } catch (e) { res.status(400).send("Invalid Link"); }
+});
+
+app.get('/api/security/whitelist', (req, res) => {
+    try {
+        const { email, scope } = jwt.verify(req.query.token, JWT_SECRET);
+        if (scope === 'whitelist') {
+            Security.removeFromBlacklist(email);
+            db.prepare('INSERT INTO access_logs (email, name, ip) VALUES (?, ?, ?)').run(email, '[ACTION] Resubscribed', req.ip);
+            res.send(`<div style="font-family:sans-serif;text-align:center;padding:50px;"><h1>Welcome back</h1><p>You can now receive emails again.</p></div>`);
+        } else throw new Error();
+    } catch (e) { res.status(400).send("Invalid Link"); }
 });
 
 app.get('/api/security/verify', (req, res) => {
@@ -303,11 +366,8 @@ app.get('/api/security/verify', (req, res) => {
     if (data && data.action === 'blacklist') {
         Security.addToBlacklist(data.email, "Honeypot");
         db.prepare('UPDATE users SET access_level = -1 WHERE email = ?').run(data.email);
-        
-        const adminToken = jwt.sign({ role: 'admin' }, ADMIN_SECRET, { expiresIn: '365d' });
-        const link = `${BASE_URL}/admin/dashboard?token=${adminToken}`;
-        const alertHtml = `<h1>HoneyPot Triggered</h1><p>User ${data.email} banned.</p><a href="${link}">Manage Users</a>`;
-        ADMIN_EMAILS.forEach(a => taskQueue.add(() => sendEmail(a, "🚨 Honeypot Triggered", alertHtml)));
+        const adminLink = `${BASE_URL}/admin/dashboard?token=${jwt.sign({ role: 'admin' }, ADMIN_SECRET, { expiresIn: '365d' })}`;
+        ADMIN_EMAILS.forEach(a => taskQueue.add(() => sendEmail(a, "🚨 Honeypot Triggered", `User ${data.email} banned. <a href="${adminLink}">Manage</a>`)));
         return res.send("<h1>Banned</h1>");
     }
     res.status(400).send("Invalid");
@@ -319,6 +379,4 @@ app.post('/api/admin/data', (req, res) => {
     res.json({ status: "updated" });
 });
 
-app.listen(PORT, () => {
-    console.log(`\n🚀 AI Agent Server running on http://localhost:${PORT}`);
-});
+app.listen(PORT, () => { console.log(`\n🚀 AI Agent Server running on http://localhost:${PORT}`); });

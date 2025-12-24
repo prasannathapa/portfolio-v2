@@ -1,5 +1,5 @@
 import { AppData, ProfileDocument, SocialsDocument, ExperienceDocument, ContactDocument, BlogsDocument, LanguageDocument } from '../types';
-import { getOrCreateUUID } from '../utils/helpers';
+import { getOrCreateUUID, getStoredUser, updateStoredUser } from '../utils/helpers';
 
 // Local Storage Keys
 const LS_CONTACT_FORM = 'portfolio_contact_form';
@@ -82,7 +82,6 @@ export const requestResume = async (email: string, name: string, company: string
                 token: "frontend-client"
             })
         });
-        
         if (!response.ok) throw new Error('Request failed');
         
         const json = await response.json();
@@ -118,7 +117,6 @@ export const requestAccess = async (name: string, email: string, additionalInfo:
                 token: "frontend-client"
             })
         });
-        
         if (!response.ok) throw new Error('Request failed');
         const json = await response.json();
 
@@ -164,21 +162,35 @@ export const sendContactMessage = async (name: string, email: string, message: s
 
 // --- Local Storage Persistence Helpers ---
 
+export const getLocalForm = (key: 'contact' | 'resume') => {
+    const storageKey = key === 'contact' ? LS_CONTACT_FORM : LS_RESUME_FORM;
+    const globalUser = getStoredUser();
+    
+    try {
+        const saved = localStorage.getItem(storageKey);
+        const parsed = saved ? JSON.parse(saved) : {};
+        
+        // Merge global identity (Highest priority for Name/Email)
+        return {
+            ...parsed,
+            name: parsed.name || globalUser.name || "",
+            email: parsed.email || globalUser.email || ""
+        };
+    } catch (e) {
+        return { name: globalUser.name || "", email: globalUser.email || "" };
+    }
+};
+
 export const saveLocalForm = (key: 'contact' | 'resume', data: any) => {
     const storageKey = key === 'contact' ? LS_CONTACT_FORM : LS_RESUME_FORM;
     try {
         localStorage.setItem(storageKey, JSON.stringify(data));
+        
+        // Also update global identity aggressively on every keystroke save
+        if (data.name || data.email) {
+            updateStoredUser({ name: data.name, email: data.email });
+        }
     } catch (e) {
         console.warn("LocalStorage access denied");
-    }
-};
-
-export const getLocalForm = (key: 'contact' | 'resume') => {
-    const storageKey = key === 'contact' ? LS_CONTACT_FORM : LS_RESUME_FORM;
-    try {
-        const saved = localStorage.getItem(storageKey);
-        return saved ? JSON.parse(saved) : null;
-    } catch (e) {
-        return null;
     }
 };
