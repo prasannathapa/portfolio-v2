@@ -359,7 +359,7 @@ function App() {
                     {/* Fixed Sidebar Footer (Settings) - Hidden on Mobile */}
                     {activeSection && (
                         <div className="hidden lg:flex w-full flex-none px-6 py-4 border-t border-gray-100 dark:border-gray-900 bg-white/95 dark:bg-black/95 backdrop-blur-md items-center justify-between z-40">
-                            <span className="text-[10px] text-gray-400">© 2025</span>
+                            <span className="text-[10px] text-gray-400">{t(data.profile.title)} © {new Date().getFullYear()}</span>
                             <Header
                                 isDark={isDark}
                                 toggleTheme={() => setIsDark(!isDark)}
@@ -385,7 +385,7 @@ function App() {
                                 transition={{ duration: 0.3 }}
                                 className="w-full h-full flex flex-col justify-start lg:justify-center overflow-y-auto"
                             >
-                                <div className="flex flex-col justify-center gap-2 lg:gap-4 max-w-2xl mx-auto w-full p-6 pt-0 lg:p-12 pb-20 lg:pb-40">
+                                <div className="flex flex-col justify-center gap-2 lg:gap-4 max-w-2xl mx-auto w-full p-6 pt-0 lg:p-12 pb-20">
                                     {navItems.map((item, i) => (
                                         <motion.button
                                             key={item.id}
@@ -565,7 +565,7 @@ function App() {
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 px-4 lg:px-0">
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 px-4 lg:px-8">
                                                         {filteredProjects.map((blog, idx) => (
                                                             <a href={blog.blog || blog.download || '#'} target="_blank" rel="noreferrer" key={idx} className="group block bg-white dark:bg-[#111] border border-gray-200 dark:border-gray-800 rounded-3xl overflow-hidden hover:border-gray-300 dark:hover:border-gray-600 transition-all hover:shadow-2xl shadow-sm flex flex-col h-full transform hover:scale-[1.02] duration-300">
                                                                 <div className="h-56 overflow-hidden relative">

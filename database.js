@@ -1,7 +1,7 @@
 ﻿const Database = require('better-sqlite3');
 const path = require('path');
 
-const dbPath = path.join(__dirname, 'portfolio.db');
+const dbPath = path.join(__dirname, 'sqlite/portfolio.db');
 const db = new Database(dbPath); // verbose: console.log to debug
 
 db.pragma('journal_mode = WAL');
