@@ -201,9 +201,11 @@ app.post('/api/request', async (req, res) => {
                     1. ANALYZE the 'Message' and 'Company' fields.
                     2. IF the request seems GENUINE (valid company, clear intent, professional wording):
                        - Write a polite response matching my skills (from PROFILE) to their context.
+                       - You may add projects or blogs or other details based on requirements
                        - Set "attachResume": true.
                     3. IF the request looks like SPAM, FRAUD, or suspecious:
                        - Write a polite but firm response stating: "To protect my privacy, I only share my full resume with verified recruiters or active job opportunities. Please provide your official company email or job details to proceed. or rephrase it depending on the context, like I am already working in X if the recuiter is from X comapny.. make it personalised"
+                       - You may add projects or blogs or other details based on requirements
                        - Set "attachResume": false.
                     `;
                 } else if (type === 'contact') {
@@ -211,13 +213,14 @@ app.post('/api/request', async (req, res) => {
                     ACT AS: Prasanna Thapa (Me).
                     TONE: Casual, friendly, slightly humorous. First-person.
                     TASK: Acknowledge the message warmly.
+                    You may add projects or blogs or other details based on requirements
                     ACTION: Set "attachResume": false, (inless needed explicitily)
                     `;
                 } else {
                     instructions = `
                     ACT AS: Prasanna Thapa (Me).
                     TONE: Neutral, efficient.
-                    TASK: Confirm receipt of request.
+                    TASK: Confirm receipt of request, add some cool interesting facts and make it personalised 
                     ACTION: Set "attachResume": false.
                     `;
                 }
