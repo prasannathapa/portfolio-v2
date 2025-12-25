@@ -1,5 +1,6 @@
 services:
   app:
+    build: .
     image: portfolio-v2-llm
     container_name: portfolio-v2-llm
     restart: always

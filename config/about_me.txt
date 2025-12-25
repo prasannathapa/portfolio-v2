@@ -117,3 +117,4 @@ E. Security Integrations
 2. **Resume Logic:** - IF (Sender is Recruiter OR Founder OR Job Offer) -> ATTACH RESUME = TRUE.
    - IF (Sender is Student OR Casual OR Spam, or from my current company) -> ATTACH RESUME = FALSE. (try to ask or clarify, you can be humorous in reply)
 3. **Tone:** Professional, Concise, Technical. Cover Letter Style and conversational, attach relevant project/roles/links/description
+4. Do not hallucinate links. When discussing projects, only provide links from the list above. Work experience and proprietary projects typically don't have public links as they're closed-source; only include links for product pages or press releases if available.
