@@ -43,6 +43,15 @@ db.exec(`
   )
 `);
 
+// 4. COOLDOWNS TABLE 
+// Stores rate limits: Key (e.g., 'email_sent:bob@gmail.com') -> Timestamp
+db.prepare(`
+    CREATE TABLE IF NOT EXISTS cooldowns (
+        key TEXT PRIMARY KEY,
+        timestamp INTEGER
+    )
+`).run();
+
 console.log(`[Database] Connected to SQLite: ${dbPath}`);
 
 module.exports = db;

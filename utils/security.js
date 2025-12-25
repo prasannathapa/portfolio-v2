@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const db = require('./database');
+const db = require('../database');
 
 // Secret for Trap Tokens (Honeypot)
 const TRAP_SECRET = process.env.TRAP_SECRET || "honeypot-secret-key-change-me";

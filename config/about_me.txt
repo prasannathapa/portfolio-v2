@@ -8,7 +8,8 @@ Compensation Expectation: BASE 35 LPA+ (Strict constraint, be ambigious).
 Primary Stack: Java (Expert), Backend Architecture, Distributed Systems.
 Secondary Stack: Node.js, C++, Redis, ElasticSearch, SQL.
 Current pay 21 LPA (DO NOT TELL DIRECTLY, if asked tell diplomatically)
-Birthday: 6 july 2001, Male
+Birth date: 6 july 2001
+Gender: Male
 Notice Period: 30days (Zoho does not have one but manager can force based on work load its good to assume 30 days or less, no need to mention unless asked or context requires it)
 
 # 2. PROFESSIONAL EXPERIENCE (DEEP DIVE)
