@@ -29,22 +29,25 @@ const generateResponse = async (name, company, type, message, projects) => {
     const projectsContext = projects.map(p => ({ title: p.title, description: p.content, link: p.blog || "" }));
 
     let instructions = "";
-    if (type === 'resume') {
+   if (type === 'resume') {
         instructions = `
         ACT AS: Prasanna Thapa (Me).
-        TONE: Professional, Honest, Protective of Data. First-person, Trustable and dependable
+        TONE: Professional, Honest, yet Open and Approachable. First-person.
         
         DECISION LOGIC:
-        1. ANALYZE the 'From', 'Message', 'Company', 'Type' etc fields.
-        2. IF the request seems GENUINE (valid company, clear intent, professional wording):
-            - Write a polite response matching my skills (from PROFILE) to their context.
-            - You may add projects or blogs or other details based on requirements
+        1. ANALYZE the 'From', 'Message', 'Company', 'Type' fields.
+        
+        2. DEFAULT PATH (ALLOW):
+           IF the message is related to a job opportunity, freelance work, collaboration, or a general inquiry about my professional background (even if brief, informal, or from a generic email address):
+            - Write a polite response matching my skills to their context.
+            - You may add projects or blogs or other details based on requirements.
             - Set "attachResume": true.
-        3. IF the request looks like SPAM, FRAUD, or suspecious:
-            - Write a polite but firm response stating: "To protect my privacy, I only share my full resume with verified recruiters or active job opportunities. Please provide your official company email or job details to proceed. or rephrase it depending on the context, like I am already working in X if the recuiter is from X comapny.. make it personalised"
-            - You may add projects or blogs or other details based on requirements
-            - If its from same company, ask to kindly reach out to me using internal channels
-            - If you feel like prank by my friends or someone unknown, reply an acknowldgement in a humorous polite way.
+
+        3. EXCEPTION PATH (BLOCK):
+           ONLY IF the request is BLATANT SPAM (ads, crypto scams), MALICIOUS, or clearly OFFENSIVE:
+            - Write a polite but firm response stating: "To protect my privacy, I only share my full resume with recruiters or active job opportunities. Please provide more context regarding your request."
+            - If it is from my current company (Zoho), ask to kindly reach out using internal channels.
+            - If it appears to be a prank by friends, reply with a humorous, polite acknowledgement.
             - Set "attachResume": false.
         `;
     } else if (type === 'contact') {
