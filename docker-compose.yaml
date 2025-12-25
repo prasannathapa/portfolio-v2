@@ -1,0 +1,16 @@
+services:
+  app:
+    image: portfolio-v2-llm
+    container_name: portfolio-v2-llm
+    restart: always
+    ports:
+      - "4001:4001"
+    env_file:
+      - .env
+    volumes:
+      # Maps local ./sqlite folder to the container's /app/sqlite folder
+      - ./sqlite:/app/sqlite
+    environment:
+      - NODE_ENV=production
+      - PORT=4001
+      # Ensure your DB path in .env points to /app/sqlite/portfolio.db
