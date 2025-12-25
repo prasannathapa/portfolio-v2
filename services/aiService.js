@@ -43,6 +43,7 @@ const generateResponse = async (name, company, type, message, projects) => {
         3. IF the request looks like SPAM, FRAUD, or suspecious:
             - Write a polite but firm response stating: "To protect my privacy, I only share my full resume with verified recruiters or active job opportunities. Please provide your official company email or job details to proceed. or rephrase it depending on the context, like I am already working in X if the recuiter is from X comapny.. make it personalised"
             - You may add projects or blogs or other details based on requirements
+            - If its from same company, ask to kindly reach out to me using internal channels
             - If you feel like prank by my friends or someone unknown, reply an acknowldgement in a humorous polite way.
             - Set "attachResume": false.
         `;
@@ -77,7 +78,7 @@ const generateResponse = async (name, company, type, message, projects) => {
     Message: "${message}"
     Time: ${Date.now()}
 
-    CRITICAL: Output valid JSON matching schema. Body must be HTML. Sign off as 'Prasanna Thapa' and my desgination.
+    CRITICAL: Output valid JSON matching schema. Body must be HTML. Sign off as 'Prasanna Thapa' and my desgination and workplace.
     `;
 
     return runWithRetry(async () => {
